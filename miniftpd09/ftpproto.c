@@ -174,7 +174,7 @@ void ftp_lreply(session_t *sess, int status, const char *text)
 
 int list_common(void)
 {
-	DIR *dir = opendir(".");
+	DIR *dir = opendir(".");//打开当前目录
 	if (dir == NULL)
 	{
 		return 0;
@@ -182,20 +182,22 @@ int list_common(void)
 
 	struct dirent *dt;
 	struct stat sbuf;
-	while ((dt = readdir(dir)) != NULL)
+	while ((dt = readdir(dir)) != NULL)//遍历目录中的文件，遍历到结束会返回NULL
 	{
+		//遍历到的文件的名称dt->d_name
+		//man 2 stat，lstat与stat区别是：如果符号链接，lstat可以看到，而stat看到的是被连接的源文件，链接文件看不到
 		if (lstat(dt->d_name, &sbuf) < 0)
 		{
 			continue;
 		}
-		if (dt->d_name[0] == '.')
+		if (dt->d_name[0] == '.')//过滤掉.号开头的文件，.tmp等等这样的文件
 			continue;
 
-		char perms[] = "----------";
-		perms[0] = '?';
+		char perms[] = "----------";//定义权限位
+		perms[0] = '?';//文件类型
 
 		mode_t mode = sbuf.st_mode;
-		switch (mode & S_IFMT)
+		switch (mode & S_IFMT)//获取文件类型
 		{
 		case S_IFREG:
 			perms[0] = '-';
@@ -220,6 +222,7 @@ int list_common(void)
 			break;
 		}
 
+		//获取权限位
 		if (mode & S_IRUSR)
 		{
 			perms[1] = 'r';
@@ -256,6 +259,9 @@ int list_common(void)
 		{
 			perms[9] = 'x';
 		}
+
+		//特殊权限位
+		//chmod 4744 file与chod 4644 file的区别是：前者的x位变为s，后者的x位变为S，因为前者有x，后者无
 		if (mode & S_ISUID)
 		{
 			perms[3] = (perms[3] == 'x') ? 's' : 'S';
@@ -271,27 +277,30 @@ int list_common(void)
 
 		char buf[1024] = {0};
 		int off = 0;
-		off += sprintf(buf, "%s ", perms);
-		off += sprintf(buf + off, " %3d %-8d %-8d ", sbuf.st_nlink, sbuf.st_uid, sbuf.st_gid);
+		off += sprintf(buf, "%s ", perms);//返回值为格式化到buf字符串中的长度
+		off += sprintf(buf + off, " %3d %-8d %-8d ", sbuf.st_nlink, sbuf.st_uid, sbuf.st_gid);//8d，表示有8位
 		off += sprintf(buf + off, "%8lu ", (unsigned long)sbuf.st_size);
 
-		const char *p_date_format = "%b %e %H:%M";
+		const char *p_date_format = "%b %e %H:%M";//日期格式
 		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		time_t local_time = tv.tv_sec;
+		gettimeofday(&tv, NULL);//获取系统当前时间，NULL：表示时区，这里表示取当前系统的时区
+		time_t local_time = tv.tv_sec;//time_t就是秒
+		//(local_time - sbuf.st_mtime) > 60*60*24*182表示系统时间-文件时间后的值超过半年，单位s
 		if (sbuf.st_mtime > local_time || (local_time - sbuf.st_mtime) > 60*60*24*182)
 		{
+			//man strftime
+			//%b是月份的缩写，%d是月份中的某一天，%e与%d类似，只是如果是01的话会变成空格1
 			p_date_format = "%b %e  %Y";
 		}
 
 		char datebuf[64] = {0};
-		struct tm* p_tm = localtime(&local_time);
+		struct tm* p_tm = localtime(&local_time);//localtime将秒转换为结构体struct tm
 		strftime(datebuf, sizeof(datebuf), p_date_format, p_tm);
 		off += sprintf(buf + off, "%s ", datebuf);
-		if (S_ISLNK(sbuf.st_mode))
+		if (S_ISLNK(sbuf.st_mode))//man 2 stat,判断是否是符号链接文件
 		{
 			char tmp[1024] = {0};
-			readlink(dt->d_name, tmp, sizeof(tmp));
+			readlink(dt->d_name, tmp, sizeof(tmp));//获取链接文件指向的文件，保存在tmp中
 			off += sprintf(buf + off, "%s -> %s\r\n", dt->d_name, tmp);
 		}
 		else
